@@ -1,0 +1,93 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use Getopt::Std;
+use Git::Bulk::Utils;
+
+#---------------------------------------------------------------------------
+#  Vars
+#---------------------------------------------------------------------------
+my %opts;
+my @bulk_buffer;
+my %results;
+my @valid_repos;
+my $bulk_util;
+my $include_repos;
+my $exclude_repos;
+my @pgd_args;
+
+#---------------------------------------------------------------------------
+#  Usage Sub
+#---------------------------------------------------------------------------
+sub usage
+{
+    use Pod::Usage;
+    my $msg     = shift;
+    my $verbose = shift;
+    return pod2usage({-message => $msg, -verbose => $verbose});
+}
+
+#---------------------------------------------------------------------------
+# GetOpts
+#---------------------------------------------------------------------------
+getopts('hi:e:', \%opts);
+if (exists $opts{'h'}) { usage('', 2); }
+push @pgd_args, "-i", $opts{i} if exists $opts{i};
+push @pgd_args, "-e", $opts{e} if exists $opts{e};
+
+#--------------------------------------------------------------------------
+#  And... go!
+#---------------------------------------------------------------------------
+$bulk_util = Git::Bulk::Utils->new('pgd_args' => \@pgd_args);
+
+@bulk_buffer = `git bulk @pgd_args -q diff origin/master... --name-only`;
+%results     = %{$bulk_util->parse_bulk_output(\@bulk_buffer)};
+
+foreach my $repo (sort keys %results) {
+    if ($results{$repo}) {
+        for (@{$results{$repo}}) {
+            print "$repo/$_\n";
+        }
+    }
+}
+
+__END__
+
+=head1 NAME
+
+B<bulk-changed-files> - Prints out all files that have changed from origin/master on every git repo in the current directory.
+
+=head1 SYNOPSIS
+
+ bulk-changed-files [-h] [-i repo1,repo2,...] [-e repo1,repo2,...]
+
+=head1 DESCRIPTION
+
+Prints out all files that have changed from origin/master on every git repo in the current directory.
+
+=head1 OPTIONS
+
+=over 8
+
+=item -h
+
+Display usage info.
+
+=item -i <repo1>,<repo2>,<...>
+
+When specified the comma seperated list of repos will be the only ones
+included by bulk-changed-files.
+
+=item -e <repo1>,<repo2>,<...>
+
+When specified the comma seperated list of repos will be excluded by bulk-changed-files.
+
+=back
+
+=head1 AUTHOR
+
+Written by Corey Maher
+
+=cut

@@ -1,0 +1,71 @@
+#!/usr/bin/perl
+
+use Git::FixRemotes;
+Git::FixRemotes->run;
+
+__END__
+
+=head1 NAME
+
+B<git-fix-remotes> - Update a git repo's remotes to match defined patterns
+
+=head1 SYNOPSIS
+
+git fix-remotes [ options ]
+
+=head1 DESCRIPTION
+
+This will take a look at all the remotes of your git repo and the git-fix-remotes.conf configuration file.  Any remotes that match the parameters of the (mysteriously undocumented) configuration file will be run through the "patterns" enabled as described below.
+
+=head1 OPTIONS
+
+=over 4
+
+=item -v
+
+Extra verbosity
+
+=item -n
+
+Print what would be done but do not actually make any changes
+
+=back
+
+=head1 PATTERNS
+
+=over 4
+
+=item prefer_pull_git
+
+Switch to using Git protocol to pull changes.  This is generally happier for the network and the SSH subsystem of the central git server.
+
+=item prefer_push_ssh
+
+Switch to using SSH protocol to push changes.  This is required since we don't enable pushes via git://.  This is present in case someone does a repo clone via git protocol.
+
+=back
+
+=head1 TODO
+
+    [ ] Document syntax of configuration file
+    [ ] Add patterns for fixing shared NFS /home dirs and useless local SSHing
+    [ ] Add smarts to deal with tilde path expansion (on remote servers too)
+    [ ] Add some tests, that would be good eh?
+    [ ] Add command line options to limit action to certain remotes
+
+=head1 BUGS
+
+Program flow is not well organized.  Sorry.
+
+Things like port numbers and ssh usernames in remote URLs are currently ignored
+
+=head1 AUTHOR
+
+Tom Embt
+
+=head1 COPYRIGHT
+
+Copyright 2010 Synacor, Inc.
+
+=cut
+

@@ -1,0 +1,108 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use Data::Dumper;
+use Getopt::Long;
+use Git;
+use Git::Repo::Utils qw(remote_repo_exists remote_paths_match remote_exists);
+use LWP::Simple;
+
+#---------------------------------------------------------------------------
+#  Vars
+#---------------------------------------------------------------------------
+my $git_repo;
+
+my $remote_path;
+my $remote_name;
+
+#---------------------------------------------------------------------------
+#  Usage Sub
+#---------------------------------------------------------------------------
+sub usage
+{
+    use Pod::Usage;
+    my $msg     = shift;
+    my $verbose = shift;
+    return pod2usage({-message => $msg, -verbose => $verbose});
+}
+
+#---------------------------------------------------------------------------
+#  GetOpts
+#---------------------------------------------------------------------------
+GetOptions(
+           'help'          => sub { usage('', 2); },
+           'path=s'        => \$remote_path,
+           'remote-name=s' => \$remote_name,
+          );
+
+#---------------------------------------------------------------------------
+#  ...and go!
+#---------------------------------------------------------------------------
+$git_repo = Git->repository();
+
+if (!$remote_path || !$remote_name) {
+    usage();
+}
+
+unless (remote_repo_exists($remote_path)) {
+    warn "Warning: The repo \"$remote_path\" does not exist.  Exiting.";
+    exit;
+}
+
+if (remote_exists($git_repo, $remote_name)) {
+    remote_paths_match($git_repo, $remote_name, $remote_path)
+      or die "Fatal: This repo already has a remote named \"$remote_name\" with a different path!";
+} else {
+    $git_repo->command('remote', 'add', $remote_name, $remote_path);
+    print "    Creating remote \"$remote_name\"...\n";
+}
+
+print "    Fetching from \"$remote_name\"...\n";
+$git_repo->command('fetch', $remote_name);
+
+#***************************************************************************
+#  Supporting Subs
+#***************************************************************************
+
+# NONE
+
+__END__
+
+=head1 NAME
+
+B<git-gank> - A gank is a "remote add" and a "fetch"
+
+=head1 SYNOPSIS
+
+ git gank [-remote-name <name>] [-path <url>]
+
+=head1 DESCRIPTION
+
+A gank is a "remote add" and a "fetch"
+
+=head1 OPTIONS
+
+=over 8
+
+=item -h
+
+Display usage info.
+
+=item -remote-name <remote_name>
+
+Name of the remote in you local repo.
+
+=item -path <remote_url>
+
+Path to the remote git repo.  This should someday support all the url options
+that git does.
+
+=back
+
+=head1 AUTHOR
+
+Written by Michael Canzoneri
+
+=cut

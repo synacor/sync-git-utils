@@ -1,0 +1,133 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+use Getopt::Std;
+use String::ShellQuote;
+
+#---------------------------------------------------------------------------
+#  Vars
+#---------------------------------------------------------------------------
+my %opts;
+my @pgd_args;
+my $run_cmd;
+
+#---------------------------------------------------------------------------
+#  Usage Sub
+#---------------------------------------------------------------------------
+sub usage
+{
+    use Pod::Usage;
+    my $msg     = shift;
+    my $verbose = shift;
+    return pod2usage({-message => $msg, -verbose => $verbose});
+}
+
+#---------------------------------------------------------------------------
+#  GetOpts
+#---------------------------------------------------------------------------
+getopts('nhi:e:doq', \%opts);
+if (exists($opts{'h'})) { usage('', 2); }
+push @pgd_args, "-i", $opts{i} if exists $opts{i};
+push @pgd_args, "-e", $opts{e} if exists $opts{e};
+push @pgd_args, "-d" if exists $opts{d};
+push @pgd_args, "-o" if exists $opts{o};
+push @pgd_args, "-q" if exists $opts{q};
+
+#---------------------------------------------------------------------------
+#  ...and go!
+#---------------------------------------------------------------------------
+# This must be aweful.  Right?
+if (!@ARGV) { usage(); }
+
+my $given_args = shell_quote(@ARGV);
+
+for my $path (split(/:/, $ENV{PATH})) {
+    next if ! -e $path;
+    opendir(my $dir, $path);
+    my @commands = map { "$path/$_" } grep { /^bulk-${ARGV[0]}$/ } readdir($dir);
+
+    if (scalar @commands) {
+        $run_cmd = "$path/bulk-$given_args";
+        last;
+    }
+
+    closedir($dir);
+}
+
+$run_cmd = "git foreach @pgd_args git $given_args" unless ($run_cmd);
+
+if (exists($opts{'n'})) {
+    print $run_cmd . "\n";
+} else {
+    system($run_cmd);
+}
+
+__END__
+
+=head1 NAME
+
+B<git-bulk> - Executes a git command across many git repos
+
+=head1 SYNOPSIS
+
+ git bulk [GIT_COMMAND]
+          [-i repo1,repo2,...] [GIT_COMMAND]
+          [-e repo1,repo2,...] [GIT_COMMAND]
+
+=head1 DESCRIPTION
+
+Execute git commands in mass. This command should execute the git command
+given across all of the repos returned by git-pgd by default or a given set.
+Git bulk will search the PATH for the command bulk-[GIT_COMMAND], if it is found
+git bulk will dispatch to it.
+The [REPO] keyword will be replaced by git-bulk with each repo returned 
+by git-pgd.
+
+=head1 OPTIONS
+
+=over 8
+
+=item -h
+
+Display usage info.
+
+=item -d
+
+Prevents the whole script from dying due to the death of one of the processes.
+
+=item -n
+
+Do not actually perform the command but print what would be executed.
+
+=item -o
+
+Prints output to STDOUT and does not include the header with path and command info.
+
+=item -i <repo1>,<repo2>,<...>
+
+When specified the comma seperated list of repos will be the only ones
+included by git-bulk.
+
+=item -e <repo1>,<repo2>,<...>
+
+When specified the comma seperated list of repos will be excluded by git-bulk
+
+=item -q
+
+Suppresses the output of the list of repos with output to stdout
+
+=back
+
+=head1 EXAMPLES
+
+git bulk checkout branch_name
+
+git bulk remote add dev_remote /home/user/checkouts/[REPO]
+
+=head1 AUTHOR
+
+Written by Michael Canzoneri
+
+=cut
+

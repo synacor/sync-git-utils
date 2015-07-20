@@ -1,0 +1,90 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use Getopt::Std;
+
+#---------------------------------------------------------------------------
+#  Vars
+#---------------------------------------------------------------------------
+my %opts;
+my $date   = $ARGV[0] || 'today';
+my $branch = $ARGV[1] || 'HEAD';
+my $parent;
+
+if ($date =~ s/((?:\^|~)\d*)$//) {
+    $parent = $1;
+}
+
+#---------------------------------------------------------------------------
+#  Usage Sub
+#---------------------------------------------------------------------------
+sub usage
+{
+    use Pod::Usage;
+    my $msg     = shift;
+    my $verbose = shift;
+    return pod2usage({-message => $msg, -verbose => $verbose});
+}
+
+#---------------------------------------------------------------------------
+# GetOpts
+#---------------------------------------------------------------------------
+getopts('h:', \%opts);
+if (exists $opts{'h'}) { usage('', 2); }
+
+#--------------------------------------------------------------------------
+#  And... go!
+#---------------------------------------------------------------------------
+chomp(my $formatted_date = `date --date="$date" +"%Y-%m-%d %H:%M:%S" 2>&1`);
+if ($? != 0) {
+    print STDERR "git-date: invalid date `$date`\n";
+    exit 2;
+}
+
+chomp(my $ref = `git rev-list -n1 --before="$formatted_date" $branch`);
+
+if ($parent) {
+    system("git rev-parse $ref$parent");
+} else {
+    print "$ref\n";
+}
+
+__END__
+
+=head1 NAME
+
+B<git-date> - Return the last commit on/before the given datetime.
+
+=head1 SYNOPSIS
+
+ git date [date]
+
+=head1 DESCRIPTION
+
+Return the last commit on/before the given datetime.
+
+You can supply a number of options for the day, such as "4/24", "today", "yesterday 5:55", etc.  You can also specify a parent of the last commit by adding a ^ or ~ (e.g. "4/24^", "today~3").
+
+If you want to specify a time, put it in quotes with the date.
+
+  git-date "yesterday 16:00"
+
+If you do not specify a time, it will default to the current time.  For example, if the current time is "2009-05-12 08:19:00" and you specify "yesterday" as the date, the date used will be "2009-05-11 08:19:00".
+
+=head1 OPTIONS
+
+=over 8
+
+=item -h
+
+Display usage info.
+
+=back
+
+=head1 AUTHOR
+
+Written by Tom Peters
+
+=cut

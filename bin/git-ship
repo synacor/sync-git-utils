@@ -1,0 +1,264 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use Git;
+
+#---------------------------------------------------------------------------
+#  Vars
+#---------------------------------------------------------------------------
+my $tags;       # Push tags too
+my $dry;        # Do a dry run
+my $clear_b;    # Removes all branches stored in git config
+my $clear_a;    # Removes all ship configuration stored in git config
+my $auto;       # Run git ship and push all branches used last time
+
+my $repo;               # git repository object
+my $repo_address;       # address of where to push the repo
+my $stored_repo;        # push location stored in git config
+my $stored_branches;    # branches stored in git config
+my @branches;           # branches to push
+
+#---------------------------------------------------------------------------
+#  Usage Sub
+#---------------------------------------------------------------------------
+sub usage
+{
+    use Pod::Usage;
+    my $msg     = shift;
+    my $verbose = shift;
+    return pod2usage({-message => $msg, -verbose => $verbose});
+}
+
+#---------------------------------------------------------------------------
+#  GetOpts
+#---------------------------------------------------------------------------
+GetOptions(
+           'help'           => sub { usage('', 2) },
+           'auto'           => \$auto,
+           'tags'           => \$tags,
+           'dry-run'        => \$dry,
+           'clear-branches' => \$clear_b,
+           'clear-all'      => \$clear_a,
+          );
+
+#---------------------------------------------------------------------------
+#  ...and go!
+#---------------------------------------------------------------------------
+eval { $repo = Git->repository() };
+die "You are not currently in a git repository\n" if $@;
+
+eval { $repo->command('config', '--unset', 'ship.branches') } if $clear_b || $clear_a;
+eval { $repo->command('config', '--unset', 'ship.url') } if $clear_a;
+
+$stored_repo = eval { $repo->command('config', '--get', 'ship.url'); };
+$repo_address = ($stored_repo) ? $stored_repo : ask_repo_address();
+die() if (!defined $repo_address || $repo_address eq '');
+chomp($repo_address);
+
+$stored_branches = eval { $repo->command('config', '--get', 'ship.branches'); };
+
+if (defined $stored_branches) {
+    @branches = split(/\s/, $stored_branches);
+}
+
+@branches = ('All Branches') if (@branches && $branches[0] eq '--all');
+
+print "Pushing to: $repo_address\n";
+
+if (!$auto || !scalar @branches) {
+    ask_branches();
+    ask_tags() unless $tags;
+}
+
+if ($auto) {
+    print "Pushing the following branches:\n";
+    my $branches = join("\n", @branches);
+    print "$branches\n";
+}
+
+print "\n";    # Spacing before push command(s)
+
+@branches = ('--all') if (grep { 'All Branches' eq $_ } @branches);
+
+my @flags;
+push(@flags, '--dry-run') if $dry;
+
+if (scalar @branches) {
+    $repo->command('push', $repo_address, @flags, @branches);
+
+    if (!defined $stored_repo || $stored_repo ne $repo_address) {
+        $repo->command('config', '--replace-all', 'ship.url', $repo_address);
+    }
+
+    my $branches_to_store = join(' ', @branches);
+    if (!defined $stored_branches || $branches_to_store ne $stored_branches) {
+        $repo->command('config', '--replace-all', 'ship.branches', $branches_to_store);
+    }
+}
+
+$repo->command('push', $repo_address, @flags, '--tags') if $tags;
+
+#***************************************************************************
+#  Supporting Subs
+#***************************************************************************
+# Asks the user for the push address
+sub ask_repo_address
+{
+    print "Where would you like to push this repository:\n";
+    chomp(my $result = <>);
+    return $result;
+}
+
+# Asks the user what branches they would like to push
+sub ask_branches
+{
+    my %all_branches = get_branches();
+    my @branch_names = sort keys %all_branches;
+
+    if (scalar @branch_names == 0) {
+        die("No Branches Found...\n");
+    }
+
+    if (scalar @branch_names == 1) {
+        @branches = ('--all');
+        return;
+    }
+
+    unshift(@branch_names, 'All Branches');
+
+    while (1) {
+        print "\n";
+
+        my $i = 0;
+        for my $branch (@branch_names) {
+            my $message = $all_branches{$branch}{'message'} || '';
+            my $hash    = $all_branches{$branch}{'hash'}    || '';
+            my $selected = (grep { $_ eq $branch } @branches) ? '*' : ' ';
+            printf "%s%2d. %-25s %-8s %-60s\n", $selected, $i, $branch, $hash, $message;
+            $i++;
+        }
+
+        print "\nWhat Branch(es) would you like to push (leave blank to continue): [@branches]\n";
+        chomp(my $input = <>);
+
+        last unless $input ne '';
+
+        my @selected_items = split(/\s/, $input);
+        for my $select (@selected_items) {
+            if ($select eq '0') {
+                toggle_selected_branch('All Branches');
+            } elsif (
+                grep {
+                    $select eq $_
+                } @branch_names
+              )
+            {
+                toggle_selected_branch($select);
+            } elsif ($select =~ /^\d+$/ && $branch_names[$select]) {
+                toggle_selected_branch($branch_names[$select]);
+            }
+        }
+    }
+    return 1;
+}
+
+# Adds or delets the selected branch from the list of selected branches to push
+sub toggle_selected_branch
+{
+    my ($branch) = @_;
+    my ($index) = grep { $branches[$_] eq $branch } 0 .. $#branches;
+
+    if (defined $index) {
+        splice(@branches, $index, 1);
+    } else {
+        push(@branches, $branch);
+    }
+    return 1;
+}
+
+# Gets a list of all branches in this repo
+sub get_branches
+{
+    my @lines = split /\n/, $repo->command('branch', '--verbose');
+    my %all_branches;
+
+    for (@lines) {
+        my ($branch, $hash, $message) = m/^(?:\*)?\s+(\S+)\s+([\w\d]+)\s+(.*)$/;
+        if ($branch && $branch ne '') {
+            $all_branches{$branch}{'message'} = $message;
+            $all_branches{$branch}{'hash'}    = $hash;
+        }
+    }
+
+    return %all_branches;
+}
+
+# Asks the user if they would like to push tags
+sub ask_tags
+{
+    while (1) {
+        print "Would you like to push your tags? (y/N) ";
+
+        chomp(my $result = <>);
+        $result = lc($result);
+
+        if ($result eq 'y' || $result eq 'n' || $result eq '') {
+            $tags = ($result eq 'y');
+            last;
+        }
+    }
+    return 1;
+}
+
+__END__
+
+=head1 NAME
+
+B<git-ship> - Runs git push on the current git repository and asks what branches to push.
+
+=head1 SYNOPSIS
+
+ git-ship [--tags] [--dry-run] [--auto] [--clear-branches] [--clear-all] [--help]
+
+=head1 DESCRIPTION
+
+Runs git push on the current git repository and asks what branches to push.
+
+=head1 OPTIONS
+
+=over 8
+
+=item --help
+
+Display usage info.
+
+=item --tags
+
+Push all tags along with the branches specified.
+
+=item --dry-run
+
+Do everything except actually send the updates.
+
+=item --auto
+
+Push every branch that was pushed the last time this command was run.
+
+=item --clear-branches
+
+Removes remembered branches.
+
+=item --clear-all
+
+Removes remembered branches and remembered ship location.
+
+=back
+
+=head1 AUTHOR
+
+Written by Corey Maher
+
+=cut

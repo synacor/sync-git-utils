@@ -1,0 +1,37 @@
+#---------------------------------------------------------------------------
+#  Things we do wrong
+#---------------------------------------------------------------------------
+ - We don't use just the git plumbing commands.
+ - We can't derive testing coverage because we arent strictly module based.
+
+#---------------------------------------------------------------------------
+#  TODO
+#---------------------------------------------------------------------------
+
+GIT-COLLAB
+ [X] - should have an option to create a local branch
+ [X] - add menu
+ [X] - We shouldnt need to pass the server name as an argument.  It should be put together by the calling script
+ [ ] - should be able to take in a number of remotes, branches, and commit ids so that it can merge a bunch of work into one local repo
+ [X] - should make sure they are actually on the local branch
+ [X] - The local branch should be temporary or created like [branchname]_REVIEW_BRANCH
+ [ ] - Should display the repo we are in
+ [ ] - Should keep track of the patches in one file
+ [ ] - 
+
+GIT-BULK
+ [X] - add multi threading
+ [X] - add support for non-git flags to git-bulk itself
+ [X] - add support for following symlinks
+ [X] - The repo that gets printed should be generated from a pwd not some fake concatination so that we know where we really are.
+ [X] - Create a config file to go in the directory that contains all of your git repos called .gitbulk.
+	   When git-bulk runs it should look up for that file. If it finds it then it knows that it can run there.
+ [X] - .gitpgd should also be able to contain exclude directories
+ [X] - find should send its errors to dev/null
+
+GIT-PGD
+ [X] - Should have include and exclude directories
+ [ ] - Should check for multiple .gitpgd files
+
+GIT-GANK
+ [ ] - Need to check for the success or failure of the ssh connection

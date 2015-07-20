@@ -1,0 +1,172 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use Cwd;
+use Data::Dumper;
+use File::Basename qw(basename);
+use Getopt::Long;
+use Git;
+use Git::Repo::Utils qw(remote_exists local_branch_checked_out local_branch_exists remote_branch_exists);
+use LWP::Simple;
+
+#---------------------------------------------------------------------------
+#  Vars
+#---------------------------------------------------------------------------
+
+my $git_repo;
+my $cmd_results;    # We have this because it appears that if we don't assign
+                    # $git_repo->command() to custom commands
+                    # then it doesn't execute.
+my $remote_path;
+my $remote_server;
+my $remote_branch_name;
+my $local_branch_name;
+my $remote_name;
+my $single_action;
+my $base_remote = 'origin';
+my $base_branch = 'master';
+
+#---------------------------------------------------------------------------
+#  Usage Sub
+#---------------------------------------------------------------------------
+sub usage
+{
+    use Pod::Usage;
+    my $msg     = shift;
+    my $verbose = shift;
+    return pod2usage({-message => $msg, -verbose => $verbose});
+}
+
+#---------------------------------------------------------------------------
+#  GetOpts
+#---------------------------------------------------------------------------
+GetOptions(
+           'help'            => sub { usage('', 2) },
+           'path=s'          => \$remote_path,
+           'branch=s'        => \$remote_branch_name,
+           'remote-name=s'   => \$remote_name,
+           'single-action=s' => \$single_action,
+           'base-remote=s'   => \$base_remote,
+           'base-branch=s'   => \$base_branch,
+          );
+
+#---------------------------------------------------------------------------
+#  ...and go!
+#---------------------------------------------------------------------------
+if (!$remote_path || !$remote_branch_name || !$remote_name) {
+    usage();
+}
+
+$git_repo          = Git->repository();
+$local_branch_name = "collab/$remote_name/$remote_branch_name";
+
+# Fetch Action
+if (!$single_action || $single_action eq 'fetch') {
+    if ($base_remote ne 'origin') {
+        die "Remote $base_remote does not exist!" unless remote_exists($git_repo, $base_remote);
+    }
+    print "Fetching $base_remote...\n";
+    $git_repo->command('fetch', $base_remote);
+}
+
+# Gank Action
+if (!$single_action || ($single_action eq 'gank')) {
+    print "Ganking Remotes...\n";
+    $cmd_results = $git_repo->command('gank', '-remote-name', $remote_name, '-path', $remote_path);
+}
+
+# Branch Action
+if (!$single_action || $single_action eq 'branch') {
+    if (!remote_branch_exists($git_repo, $remote_name, $remote_branch_name)) {
+        if ($single_action eq 'branch') {
+            print "No matching remote branch.  Checking out $base_remote/$base_branch\n";
+            $git_repo->command(qw/checkout $base_remote\/$base_branch/);
+        } else {
+            print "The branch \"$remote_branch_name\" does not exist in the remote \"$remote_name\"\n";
+        }
+    } else {
+        if (local_branch_exists($git_repo, $local_branch_name)) {
+            print "Local Branch Exists\n";
+            if (!local_branch_checked_out($git_repo, $local_branch_name)) {
+                print "Local branch wasn't checkout out.  Doing that now.\n";
+                $git_repo->command('checkout', $local_branch_name);
+            }
+            print "Merging $remote_name/$remote_branch_name into local branch\n";
+            $git_repo->command('merge', "$remote_name/$remote_branch_name");
+
+            # make sure that the local branch is a tracking branch from the given remote
+        } else {
+            print "Creating Local Branch...\n";
+            $git_repo->command('checkout', '-b', $local_branch_name, "$remote_name/$remote_branch_name");
+        }
+    }
+}
+
+# View Action
+if (!$single_action || ($single_action eq 'view')) {
+    my $diff_branch;
+    if (local_branch_exists($git_repo, $local_branch_name)) {
+        $diff_branch = $local_branch_name;
+    } else {
+        $diff_branch = "$remote_name/$remote_branch_name";
+    }
+
+    system("git diff --name-status $base_remote/$base_branch...$diff_branch");
+}
+
+#***************************************************************************
+#  Supporting Subs
+#***************************************************************************
+
+# NONE
+
+__END__
+
+=head1 NAME
+
+B<git-collab> - Review changes on a remote repo or set of repos
+
+=head1 SYNOPSIS
+
+ git collab [-remote-name R_NAME] [-path R_URL] [-branch R_BRANCH]
+
+=head1 DESCRIPTION
+
+Review changes on a remote repo or set of repos
+
+=head1 OPTIONS
+
+=over 8
+
+=item -help
+
+Display usage info.
+
+=item -single-action <action>
+
+This will run B<git-collab> but only perform one of the functions.  This allows
+the user to write scripts that execute the actions across multiple repos
+at a time.  The available values are "fetch", "gank", "branch", and "view".
+
+=item -remote-name <remote_name>
+
+Name of the remote in your git repo.
+
+=item -path <remote_url>
+
+Path to the remote repo.
+
+=item -branch <branch_name>
+
+Branch in the remote repo that you want to review.  A local branch with the
+name "collab/REMOTE_NAME/BRANCH" will be created for this purpose.
+
+=back
+
+=head1 AUTHOR
+
+Written by Michael Canzoneri
+
+=cut

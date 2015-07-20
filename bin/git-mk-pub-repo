@@ -1,0 +1,165 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use Cwd;
+use File::Spec;
+use Getopt::Long;
+use Git;
+
+#---------------------------------------------------------------------------
+#  Vars
+#---------------------------------------------------------------------------
+my $server;       # server ip or hostname
+my $location;     # location on server to make repo
+my $push_type;    # extra push options
+
+my $repo_name;    # name of repo to create
+my $repo;         # git repository object
+my $remote;       # remote name
+
+my $auto;         # flag which causes a push to occur
+
+my @VALID_PUSH = qw(all mirror tags);    # valid push options
+
+#---------------------------------------------------------------------------
+#  Usage Sub
+#---------------------------------------------------------------------------
+sub usage
+{
+    use Pod::Usage;
+    my $msg     = shift;
+    my $verbose = shift;
+    return pod2usage({-message => $msg, -verbose => $verbose});
+}
+
+#---------------------------------------------------------------------------
+#  GetOpts
+#---------------------------------------------------------------------------
+GetOptions(
+           'help'       => sub { usage('', 2) },
+           'server=s'   => \$server,
+           'location=s' => \$location,
+           'remote=s'   => \$remote,
+           'push=s'     => \$push_type,
+           'auto'       => \$auto,
+          );
+
+#---------------------------------------------------------------------------
+#  ...and go!
+#---------------------------------------------------------------------------
+usage('Remote repo location is required') unless defined $location;
+usage("$push_type is not a valid push option") if defined $push_type && !grep { $_ eq $push_type } @VALID_PUSH;
+
+$repo      = Git->repository();
+$repo_name = get_repo_name();
+$location  = File::Spec->canonpath($location);
+
+unless ($remote) {
+    $remote = $ENV{'USER'} . (($server) ? "_$server" : '_local');
+}
+
+my $path = "$location/$repo_name.git";
+
+if ($server) {
+    my $result = `ssh $server "GIT_DIR=$path git init --bare; exit" 2>&1`;
+    print $result;
+    exit() unless $result =~ m/Git repository in $location\/$repo_name/;
+    $path = "$server:$path";
+} else {
+    my $dir = getcwd();
+    mkdir($path) or die("Could not create bare public repo $path\n");
+    chdir($path);
+    Git::command('init', '--bare');
+    chdir($dir);
+}
+
+$repo->command('remote', 'add', $remote, $path);
+
+push_branches() if $auto;
+
+#***************************************************************************
+#  Supporting Subs
+#***************************************************************************
+# Returns the name of the current repository
+sub get_repo_name
+{
+    my $name = File::Spec->canonpath($repo->wc_path());
+    return (File::Spec->splitdir($name))[-1];
+}
+
+# Runs the push command
+sub push_branches
+{
+    my @params = qw(push);
+
+    if (!scalar @ARGV) {
+        $push_type = 'all';
+    }
+
+    if ($push_type) {
+        push(@params, "--$push_type");
+    }
+
+    push(@params, $remote);
+
+    if (!defined $push_type || $push_type eq 'tags') {
+        push(@params, @ARGV);
+    }
+
+    $repo->command(@params);
+    return 1;
+}
+
+__END__
+
+=head1 NAME
+
+B<git-mk-pub-repo> - Utility script to help create a public git repository which you can push commits to.
+
+=head1 SYNOPSIS
+
+ git-mk-pub-repo [--server <http://git.example.com/>] [--location </home/git/repos/>] [--remote <name>] [--auto] [--push <all|mirror|tags>] [<branch> ...]
+
+=head1 DESCRIPTION
+
+Utility script to help create a public git repository which you can push commits to.
+
+=head1 OPTIONS
+
+=over 8
+
+=item --help
+
+Display usage info.
+
+=item --server <http://git.example.com/>
+
+IP or URL of the server to publish this git repository to.
+
+=item --location </home/git/repos/>
+
+Location on the server to publish this git repository to.
+
+=item --remote <name>
+
+Name of the remote to create. By default it is username_server or username_local.
+
+=item --push <all|mirror|tags>
+
+Extra push flags to pass through to the push command. See documentation for git-push.
+Possible values are "all", "mirror", and "tags".
+When no branches are supplied "all" is assumed.
+
+=item --auto
+
+Pushes branches to the public repo after it is created. Passes options specified by --push to git-push.
+
+=back
+
+=head1 AUTHOR
+
+Written by Corey Maher
+
+=cut

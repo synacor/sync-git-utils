@@ -1,0 +1,204 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+use Cwd;
+use Data::Dumper;
+use File::Basename qw(basename);
+use Getopt::Std;
+use Term::ANSIColor qw(:constants);
+use IPC::Run qw(start finish);
+use String::ShellQuote;
+
+#---------------------------------------------------------------------------
+#  Vars
+#---------------------------------------------------------------------------
+my $given_command;
+my %opts;
+my %proc;
+my %repo_info;
+my $overall_err;
+my @failed_repos;
+my @processed_repos;
+my $total_commands = 0;
+my @pgd_args;
+my $no_die;
+my $use_stdout;
+my $quiet;
+my $concurrent_proc;
+
+#---------------------------------------------------------------------------
+#  Usage Sub
+#---------------------------------------------------------------------------
+sub usage
+{
+    use Pod::Usage;
+    my $msg     = shift;
+    my $verbose = shift;
+    return pod2usage({-message => $msg, -verbose => $verbose});
+}
+
+#---------------------------------------------------------------------------
+#  GetOpts
+#---------------------------------------------------------------------------
+getopts('hi:e:doq', \%opts);
+if (exists($opts{'h'})) { usage('', 2); }
+push @pgd_args, "-i", $opts{i} if exists $opts{i};
+push @pgd_args, "-e", $opts{e} if exists $opts{e};
+
+if (exists($opts{'d'})) { $no_die     = $opts{'d'}; }
+if (exists($opts{'o'})) { $use_stdout = $opts{'o'}; }
+if (exists($opts{'q'})) { $quiet      = $opts{'q'}; }
+
+#---------------------------------------------------------------------------
+#  ...and go!
+#---------------------------------------------------------------------------
+chomp(my @repositories = `git pgd @pgd_args`);
+die "Oh Snap!  There are no git repos to work on.\n" unless @repositories;
+%repo_info = map { basename($_) => {'path' => $_} } @repositories;
+
+$concurrent_proc = ($use_stdout) ? 1 : 4;
+$given_command = shell_quote(@ARGV);
+$given_command =~ s/\'\\\'//g;    # Lets not quote slashes too
+
+spawn();
+
+if (@failed_repos > 0 && !$quiet) {
+    print "\nThe following repos had content in STDERR:\n", join("\n", @failed_repos), "\n";
+}
+
+sub spawn
+{
+    foreach (sort keys %repo_info) {
+        my $repo = $_;
+        my $out  = '';
+        my @start_command;
+
+        # We introduce the [REPO] argument for when a git command needs to have
+        # the git repo name in it
+        ($repo_info{$repo}{'command'} = $given_command) =~ s/\[REPO\]/$repo/;
+
+        my $direct_out = ($use_stdout) ? \*STDOUT : \$out;
+
+        chdir("$repo_info{$repo}{'path'}");
+
+        my $given_command = $repo_info{$repo}{'command'};
+        $given_command = "'" . $given_command . "'" if ($given_command =~ m/.*?:(\-|\.).*/);
+
+        @start_command = ('sh', '-c', $given_command);
+        $proc{$repo} = {
+                        handle => start(\@start_command, \*STDIN, $direct_out, \$out),
+                        output => \$out,
+                       };
+
+        push(@processed_repos, $repo);
+
+        # We don't to hit certain limits by making too many similar calls
+        # so we do our processing in batches of 4
+        $total_commands++;
+        if ($total_commands % $concurrent_proc == 0 || $total_commands == keys(%repo_info)) {
+            hatch();
+        }
+    }
+    return 1;
+}
+
+sub hatch
+{
+    while (my $repo = shift @processed_repos) {
+        my $handle = $proc{$repo}{'handle'};
+        unless ($handle) {
+            print "Missing handle $repo";
+            next;
+        }
+        my $success = $handle->finish();
+        my $err     = $? >> 8;
+
+        if ($err) {
+            push(@failed_repos, $repo);
+        }
+
+        my $out = ${$proc{$repo}{'output'}};
+        chomp $out;
+
+        print_header($repo) unless $use_stdout;
+
+        unless ($out eq '') {
+            print $out . "\n";
+            print("Error:$err\n") unless $success;
+        }
+
+        $overall_err |= $err;    # yes, bitwise
+        unless (!$no_die || $success) {
+            foreach my $remaining (keys %repo_info) {
+                $handle->kill_kill();
+            }
+            exit $err;
+        }
+    }
+    return 1;
+}
+
+sub print_header
+{
+    my $repo = shift;
+    print RED, BOLD, $repo_info{$repo}{'path'}, " - ", MAGENTA, BOLD, $repo_info{$repo}{'command'}, RESET, "\n";
+    return 1;
+}
+
+__END__
+
+=head1 NAME
+
+B<git-foreach> - Execute a command across all git repos 
+
+=head1 SYNOPSIS
+
+ git foreach [command]
+
+=head1 DESCRIPTION
+
+Runs the given command in each repo returned by git-pgd
+
+=head1 OPTIONS
+
+=over 8
+
+=item -h
+
+Display usage info.
+
+=item -d
+
+Prevents the whole script from dying due to the death of one of the processes.
+
+=item -o
+
+Switches to single threaded and prints STDOUT to STDOUT.
+
+=item -i <repo1>,<repo2>,<...>
+
+When specified the comma seperated list of repos will be the only ones
+included by git-foreach
+
+=item -e <repo1>,<repo2>,<...>
+
+When specified the comma seperated list of repos will be excluded by git-foreach
+
+=item -q
+
+Suppresses the output of the list of repos with output to stdout
+
+=back
+
+=head1 EXAMPLES
+
+git foreach ls
+
+git foreach git branch
+
+=head1 AUTHOR
+
+Written by Michael Canzoneri
+
+=cut

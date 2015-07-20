@@ -1,0 +1,75 @@
+#!/usr/bin/perl
+use Git::Pgd::Command::list;
+Git::Pgd::Command::list->run;
+
+__END__
+
+=head1 NAME
+
+B<git-pgd> - Stands for "present git directory". Returns all the git 
+directories that are in the directory I am running the command from. 
+
+=head1 SYNOPSIS
+
+ git pgd [-i repo1,repo2,...] 
+ git pgd [-e repo1,repo2,...]
+
+=head1 DESCRIPTION
+
+B<git-pgd> will provide you with a list of all the git repositories that are
+one level deep in your current directory.  It will also search up from
+your current directory for a "B<.gitpgd>" file.  If it finds that file it will
+behave as if you are running it from that directory.  This is useful if you
+are in one specific repo and do not wish to change to the root of your
+repositories to run git-bulk commands.
+
+You can also put some configuration information in the B<.gitpgd> file.  You
+can list repos that should always be excluded by adding an exclude line like this:
+
+ exclude = repo1 repo2 repo3
+
+Or you can create custom groups of repos that you can pass with the B<-i> or B<-e> options.
+This can make it much easier to work with repos that you commonly work with.
+
+ [groups]
+ foo = repo1 repo2 repo3
+ bar = foo repo4 repo5
+
+You are free to put groups in other groups but be careful to not create a loop of dependent groups.
+
+=head1 OPTIONS
+
+=over 8
+
+=item -help
+
+Display usage info.
+
+=item -i repo1,repo2,...
+
+When specified the comma seperated list of repos will be the only ones 
+included by git-pgd.  If you pass both -e and -i values then only -i will be respected.
+
+=item -e repo1,repo2,...
+
+When specified the comma seperated list of repos will be excluded by git-pgd.
+A newline specified list of repos to exclude may also be defined in the "B<.gitpgd>" file.
+If you pass both -e and -i values then only -i will be respected.
+
+=item -show-git-root
+
+This will print what git-pgd believes to be the root from which to search
+for git repos
+
+=item -list
+
+This flag will have git-pgd print a list of the repos and not the whole path to the repos which is the default.
+
+=back
+
+=head1 AUTHOR
+
+Written by Michael Canzoneri
+
+=cut
+
