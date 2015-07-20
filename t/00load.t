@@ -30,15 +30,16 @@ BEGIN {
     }
 
     my @modules = qw(   
-                        Date::Manip
                         Git
-                        HTML::Tree
                         IPC::Run
-                        JSON
                         LWP::Simple
-                        LWP::UserAgent
                         String::ShellQuote
                         Sub::Install
+						File::Spec
+						App::Cmd
+						Config::INI
+						Config::General
+						Term::ANSIColor
                     );
 
     find({
