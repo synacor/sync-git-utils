@@ -13,13 +13,11 @@ WriteMakefile(
     EXE_FILES => [
                   'bin/git-gank',
                   'bin/bulk-changed-files',
-                  'bin/git-date',
                   'bin/git-pgd',
                   'bin/git-ship',
                   'bin/git-foreach',
                   'bin/git-bulk',
                   'bin/git-collab',
-                  'bin/git-checkout-date',
                   'bin/git-mk-pub-repo',
                   'bin/git-fix-remotes',
                  ],
