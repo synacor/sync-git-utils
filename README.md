@@ -3,7 +3,7 @@ Synacor git Utilities
 
 [![Build Status](https://travis-ci.org/synacorinc/sync-git-utils.svg?branch=master)](https://travis-ci.org/synacorinc/sync-git-utils)
 
-The Synacor git Utilites are a set of git commands developed for use internally
+The Synacor git Utilities are a set of git commands developed for use internally
 at Synacor that we felt might be useful for the community at large.  The primary utility
 in this set is `git-bulk`, which allows the execution of a git command across multiple
 repositories in a common root.  This is incredibly useful if you work with a large number
