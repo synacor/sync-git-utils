@@ -1,7 +1,7 @@
 Synacor git Utilities
 =====================
 
-[![Build Status](https://travis-ci.org/synacorinc/sync-git-utils.svg?branch=master)](https://travis-ci.org/synacorinc/sync-git-utils)
+[![Build Status](https://travis-ci.org/synacor/sync-git-utils.svg?branch=master)](https://travis-ci.org/synacor/sync-git-utils)
 
 The Synacor git Utilities are a set of git commands developed for use internally
 at Synacor that we felt might be useful for the community at large.  The primary utility
